@@ -1,0 +1,7 @@
+MuiSav — PWA
+Ficheiros: index.html, manifest.webmanifest, sw.js, pasta icons/
+1) Publicar a pasta inteira num alojamento HTTPS (Netlify Drop, Cloudflare Pages ou GitHub Pages).
+2) Abrir o link no telemóvel:
+   - Android (Chrome): menu ⋮ > "Instalar aplicação".
+   - iPhone (Safari): Partilhar > "Adicionar ao ecrã principal".
+Os dados ficam guardados SÓ no dispositivo. Faça cópias (Apoio > Cópias de segurança).
