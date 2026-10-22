@@ -1,7 +1,11 @@
-MuiSav — PWA
-Ficheiros: index.html, manifest.webmanifest, sw.js, pasta icons/
-1) Publicar a pasta inteira num alojamento HTTPS (Netlify Drop, Cloudflare Pages ou GitHub Pages).
-2) Abrir o link no telemóvel:
-   - Android (Chrome): menu ⋮ > "Instalar aplicação".
-   - iPhone (Safari): Partilhar > "Adicionar ao ecrã principal".
-Os dados ficam guardados SÓ no dispositivo. Faça cópias (Apoio > Cópias de segurança).
+MuiSav com login (PWA + Supabase)
+1. supabase.com > New project (plano grátis).
+2. SQL Editor: colar o conteúdo de supabase.sql e executar.
+3. Authentication > Users > Add user: criar a tua conta e a de cada colaborador (email + palavra-passe).
+   Desligar o registo público (sign-ups) nas definições de Authentication.
+4. Executar o último comando do supabase.sql (comentado) para te tornares administrador.
+5. Project Settings > API: copiar "Project URL" e "anon public key" para SB_URL e SB_KEY no início do script em index.html.
+6. Publicar a pasta (Netlify Drop, Cloudflare Pages ou GitHub Pages) e instalar no telemóvel.
+Cada colaborador vê só os seus dados. O administrador aprova ou recusa os pedidos no separador "Equipa", depois de ver as fotos e a assinatura.
+Se já tinha executado o supabase.sql antes, execute só esta linha:
+  create policy reg_upd_admin on registos for update using (public.sou_admin()) with check (public.sou_admin());

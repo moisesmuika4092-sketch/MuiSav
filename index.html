@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-AO"><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>MuiSav</title><meta name="theme-color" content="#16408A" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#12284F" media="(prefers-color-scheme: dark)"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" type="image/png" href="icons/favicon.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="MuiSav"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<html lang="pt-AO"><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><title>MuiSav</title><meta name="theme-color" content="#16408A" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#12284F" media="(prefers-color-scheme: dark)"><link rel="manifest" href="manifest.webmanifest"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script><link rel="icon" type="image/png" href="icons/favicon.png"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="MuiSav"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -318,6 +318,7 @@ input[type=range]::-moz-range-track{background:transparent}
     <button type="button" data-nav="aquisicoes">Aquisição</button>
     <button type="button" data-nav="clientes">Clientes</button>
     <button type="button" data-nav="apoio">Apoio</button>
+    <button type="button" data-nav="admin" id="navAdmin" hidden>Equipa</button>
   </div>
 </nav>
 
@@ -380,6 +381,7 @@ function situacao(e,hoje,aviso){
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='livro_prestacoes_v1';
+const SB_URL='COLE_AQUI_O_URL',SB_KEY='COLE_AQUI_A_CHAVE_ANON';
 const DEF={negocio:'MuiSav',intro:'',banco:'',titular:'',iban:'',express:'',taxa:5,prazo:10,metodo:'simples',aviso:7,esforcoMax:30,aprovar:70,rever:50};
 const CRIT=[
   {id:'esforco',peso:3,auto:true,label:'A prestação cabe no rendimento do cliente'},
@@ -395,7 +397,7 @@ const METODOS={simples:'Juros simples sobre o capital',price:'Prestação consta
 
 const S={clientes:[],emprestimos:[],aquisicoes:[],config:Object.assign({},DEF),pronto:{c:false,e:false,a:false,g:false},modo:'a ligar',erro:'',lsOK:true};
 const UI={sim:null,view:'painel',empId:null,aqId:null,filtro:'todos',filtroAq:'todos',busca:'',confirmFn:null};
-let DB=null,DL=null,D={},aSalvar=false,toastT=null;
+let SB=null,SES=null,PERFIL=null,ADMROWS=[],ADMPERF=[],ADM,ADMLOAD=false,DB=null,DL=null,D={},aSalvar=false,toastT=null;
 
 const prontoTudo=()=>S.pronto.c&&S.pronto.e&&S.pronto.a&&S.pronto.g;
 const novoId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -417,15 +419,15 @@ function lerLocal(){
   try{const raw=localStorage.getItem(KEY);if(raw){const o=JSON.parse(raw);S.clientes=o.clientes||[];S.emprestimos=o.emprestimos||[];S.aquisicoes=o.aquisicoes||[];S.config=Object.assign({},DEF,o.config||{})}}catch(e){S.lsOK=false}
   S.pronto={c:true,e:true,a:true,g:true};
 }
-function gravarLocal(){
-  try{localStorage.setItem(KEY,JSON.stringify({clientes:S.clientes,emprestimos:S.emprestimos,aquisicoes:S.aquisicoes,config:S.config}))}catch(e){S.lsOK=false}
-}
-function ligar(){
-  const err=e=>{S.erro='Não foi possível ler os dados ('+((e&&e.code)||'erro')+').';render()};
-  DB.collection('clientes').onSnapshot(s=>{S.clientes=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));S.pronto.c=true;render()},err);
-  DB.collection('emprestimos').onSnapshot(s=>{S.emprestimos=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));S.pronto.e=true;render()},err);
-  DB.collection('aquisicoes').onSnapshot(s=>{S.aquisicoes=s.docs.map(d=>Object.assign({},d.data(),{id:d.id}));S.pronto.a=true;render()},err);
-  DB.doc('config/geral').onSnapshot(s=>{S.config=Object.assign({},DEF,s.exists?s.data():{});S.pronto.g=true;render()},err);
+function gravarLocal(){}
+async function ligar(){
+  const r=await SB.from('registos').select('k,col,data').eq('owner',SES.user.id);
+  if(r.error){S.erro='Não foi possível ler os dados.';render();return}
+  const a={clientes:[],emprestimos:[],aquisicoes:[]};let cfg={};
+  r.data.forEach(x=>{const id=x.k.slice(x.col.length+1);if(x.col==='config')cfg=x.data;else if(a[x.col])a[x.col].push(Object.assign({},x.data,{id:id}))});
+  S.clientes=a.clientes;S.emprestimos=a.emprestimos;S.aquisicoes=a.aquisicoes;S.config=Object.assign({},DEF,cfg);S.erro='';
+  const p=await SB.from('perfis').select('nome,papel').eq('id',SES.user.id).maybeSingle();PERFIL=p.data||{papel:'colaborador'};
+  S.pronto={c:true,e:true,a:true,g:true};render();
 }
 const FICH={async save(o){
   const mime=/\.csv$/i.test(o.filename)?'text/csv;charset=utf-8':'application/json';
@@ -443,18 +445,19 @@ const FICH={async save(o){
   setTimeout(()=>URL.revokeObjectURL(u),4000);
 }};
 async function iniciar(){
-  try{DB=window.claude&&window.claude.use?await window.claude.use('db'):null}catch(e){DB=null}
-  try{DL=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){DL=null}
-  if(!DL)DL=FICH;
-  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
-  if(DB){S.modo='nuvem';ligar()}else{S.modo='local';lerLocal();render()}
-  render();
+  DL=FICH;
+  if(!window.supabase||SB_URL.indexOf('COLE')===0){S.modo='config';render();return}
+  SB=window.supabase.createClient(SB_URL,SB_KEY);
+  const g=await SB.auth.getSession();SES=g.data&&g.data.session;
+  SB.auth.onAuthStateChange((ev,s)=>{const mudou=!!s!==!!SES;SES=s;if(!mudou)return;
+    if(s){S.modo='nuvem';ligar()}else{S.clientes=[];S.emprestimos=[];S.aquisicoes=[];S.config=Object.assign({},DEF);S.pronto={c:false,e:false,a:false,g:false};PERFIL=null;ADM=undefined;UI.view='painel';S.modo='login';render()}});
+  if(SES){S.modo='nuvem';ligar()}else{S.modo='login';render()}
 }
 async function salvar(col,obj){
   const id=obj.id||novoId({clientes:'c',emprestimos:'e',aquisicoes:'a'}[col]);
   const data=Object.assign({},obj);delete data.id;
-  if(DB){await DB.collection(col).doc(id).set(data)}
-  else{
+  {const r=await SB.from('registos').upsert({k:col+':'+id,col:col,data:data});if(r.error)throw r.error}
+  {
     const arr=S[col];
     const i=arr.findIndex(x=>x.id===id);const novo=Object.assign({},data,{id:id});
     if(i>=0)arr[i]=novo;else arr.push(novo);
@@ -463,11 +466,11 @@ async function salvar(col,obj){
   return id;
 }
 async function apagar(col,id){
-  if(DB){await DB.collection(col).doc(id).delete()}
-  else{S[col]=S[col].filter(x=>x.id!==id);gravarLocal();render()}
+  {const r=await SB.from('registos').delete().eq('k',col+':'+id);if(r.error)throw r.error}
+  {S[col]=S[col].filter(x=>x.id!==id);gravarLocal();render()}
 }
 async function salvarConfig(cfg){
-  if(DB){await DB.doc('config/geral').set(cfg)}else{S.config=Object.assign({},cfg);gravarLocal();render()}
+  {const r=await SB.from('registos').upsert({k:'config:geral',col:'config',data:cfg});if(r.error)throw r.error}{S.config=Object.assign({},cfg);gravarLocal();render()}
 }
 function msgErro(e){
   const c=e&&e.code;
@@ -623,7 +626,7 @@ function carregando(){
 function infoArmazem(){
   const el=$('#storeInfo');
   const f=(c,t)=>'<span class="sdot '+c+'"></span>'+t;
-  if(S.modo==='nuvem')el.innerHTML=f('good','Dados guardados');
+  if(S.modo==='nuvem')el.innerHTML=f('good',esc(SES.user.email)+' · <button type="button" class="chip" data-action="sair">Sair</button>');
   else if(S.modo==='local')el.innerHTML=S.lsOK?f('warn','Só neste dispositivo'):f('bad','Sem armazenamento');
   else el.innerHTML=f('','A ligar…');
 }
@@ -890,9 +893,10 @@ function vEmprestimo(){
   h+='<section class="block"><div class="sec-h"><div><p class="eyebrow">Empréstimo de</p><h2 class="big">'+esc(cl?cl.nome:'Cliente removido')+'</h2></div>'+pillEstado(s.estado)+'</div>'
     +'<p class="muted">'+(cl&&cl.telefone?'Telefone <span class="mono">'+esc(cl.telefone)+'</span>':'Sem telefone registado')+(cl&&(cl.banco||cl.iban)?'<br>Banco do cliente: '+esc(cl.banco||'')+(cl.iban?' <span class="mono">'+esc(cl.iban)+'</span>':''):'')+(e.notas?'<br>'+esc(e.notas):'')+'</p></section>';
 
+  h+=cl?secDocs(cl):'';
   h+='<section class="block"><h2>Próximo passo</h2>';
   if(s.estado==='analise'){
-    h+='<p>Este pedido está em análise. Veja a avaliação mais abaixo e decida se aprova.</p><div class="actions"><button type="button" class="btn pri" data-action="aprovar" data-id="'+esc(e.id)+'">Aprovar pedido</button><button type="button" class="btn bad" data-action="recusar" data-id="'+esc(e.id)+'">Recusar pedido</button></div>';
+    h+='<p>Este pedido está em análise. O administrador vai verificar se a pessoa existe (fotos e assinatura) e aprovar ou recusar.</p>'+(cl&&nDocs(cl)<4?'<div class="notice bad">Faltam fotos. Adicione-as na secção Documentos e termo.</div>':'');
   }else if(al){
     h+='<div class="notice'+(al.grupo==='atraso'?' bad':'')+'">'+(al.grupo==='atraso'?al.qtd+(al.qtd===1?' prestação em atraso':' prestações em atraso')+', no total de '+kz(al.valor):al.grupo==='hoje'?'Uma prestação vence hoje: '+kz(al.valor):'A próxima prestação vence em '+al.dias+(al.dias===1?' dia':' dias')+': '+kz(al.valor))+'</div>'
       +'<div class="actions"><button type="button" class="btn pri" data-action="pagar" data-id="'+esc(e.id)+'">Registar pagamento</button><button type="button" class="btn" data-action="msg" data-id="'+esc(e.id)+'">Copiar mensagem de cobrança</button>'
@@ -1034,7 +1038,7 @@ function vApoio(){
     +'<label class="field"><span>Nome do negócio</span><input type="text" id="s-negocio" value="'+esc(c.negocio)+'" autocomplete="off"></label>'
     +'<label class="field"><span>Apresentação no Painel</span><textarea id="s-intro" placeholder="Deixe em branco para usar o texto da MuiSav.">'+esc(c.intro)+'</textarea></label></div>'
     +'<div class="fs"><h3>Coordenadas bancárias da MuiSav</h3><p class="hint">Onde os clientes pagam. Vão no fim das mensagens de cobrança.</p><div class="fgrid">'
-    +'<label class="field"><span>Banco</span><input type="text" id="s-banco" value="'+esc(c.banco)+'" autocomplete="off"></label>'
+    +'<label class="field"><span>Banco</span>'+selBanco('s-banco',c.banco)+'</label>'
     +'<label class="field"><span>Titular da conta</span><input type="text" id="s-titular" value="'+esc(c.titular)+'" autocomplete="off"></label>'
     +'<label class="field"><span>IBAN</span><input type="text" id="s-iban" value="'+esc(c.iban)+'" placeholder="AO06 0000 0000 0000 0000 0000 0" autocomplete="off"></label>'
     +'<label class="field"><span>Multicaixa Express (telefone)</span><input type="tel" id="s-express" value="'+esc(c.express)+'" inputmode="tel" autocomplete="off"></label>'
@@ -1071,8 +1075,8 @@ function render(){
   const fid=a&&a.id&&main.contains(a)?a.id:null;
   let ss=null,se=null;if(fid&&a.selectionStart!=null){try{ss=a.selectionStart;se=a.selectionEnd}catch(_){}}
   const y=window.scrollY;
-  const V={painel:vPainel,clientes:vClientes,emprestimos:vEmprestimos,emprestimo:vEmprestimo,aquisicoes:vAquisicoes,aquisicao:vAquisicao,apoio:vApoio};
-  main.innerHTML=(V[UI.view]||vPainel)();
+  const V={painel:vPainel,clientes:vClientes,emprestimos:vEmprestimos,emprestimo:vEmprestimo,aquisicoes:vAquisicoes,aquisicao:vAquisicao,apoio:vApoio,admin:vAdmin};
+  main.innerHTML=S.modo==='login'?vLogin():S.modo==='config'?'<div class="card">Falta configurar o Supabase: edite SB_URL e SB_KEY no index.html.</div>':(V[UI.view]||vPainel)();
   if(UI.view==='apoio')atualizarSim();
   if(fid){const n=document.getElementById(fid);if(n){n.focus();try{if(ss!=null)n.setSelectionRange(ss,se)}catch(_){}}}
   window.scrollTo(0,y);
@@ -1083,7 +1087,9 @@ function render(){
   const n=prontoTudo()?alertas().concat(alertasAq()).filter(x=>x.grupo==='atraso'||x.grupo==='hoje').length:0;
   const bd=$('#navBadge');bd.hidden=!n;bd.textContent=n;
   const hj=$('#hoje');if(hj)hj.textContent=new Date().toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const na=$('#navAdmin');if(na)na.hidden=!(PERFIL&&PERFIL.papel==='admin');
   infoArmazem();
+  if(SB&&SES)carregarFotos();
 }
 function ir(v){UI.view=v;if(v!=='emprestimo')UI.empId=null;if(v!=='aquisicao')UI.aqId=null;render();window.scrollTo(0,0)}
 
@@ -1129,12 +1135,12 @@ function sheetCliente(id){
     +'<label class="field"><span>Telefone do fiador</span><input type="tel" id="c-fiadortel" value="'+v('fiadorTel')+'" inputmode="tel" autocomplete="off"></label>'
     +'</div></div>'
     +'<div class="fs"><h3>Coordenadas bancárias do cliente</h3><p class="hint">Opcional. Úteis para devolver dinheiro ou confirmar transferências.</p><div class="fgrid">'
-    +'<label class="field"><span>Banco</span><input type="text" id="c-banco" value="'+v('banco')+'" autocomplete="off"></label>'
+    +'<label class="field"><span>Banco</span>'+selBanco('c-banco',v('banco'))+'</label>'
     +'<label class="field"><span>IBAN</span><input type="text" id="c-iban" value="'+v('iban')+'" placeholder="AO06 0000 0000 0000 0000 0000 0" autocomplete="off"></label>'
     +'</div></div>'
     +'<div class="fs"><h3>Notas</h3><label class="field"><span>Observações sobre o cliente</span><textarea id="c-notas">'+v('notas')+'</textarea></label></div>'
     +'<p class="notice" id="c-erro" hidden></p>'
-    +'<div class="actions"><button type="submit" class="btn pri">Guardar cliente</button>'+(c?'<button type="button" class="btn bad" data-action="apagar-cliente" data-id="'+esc(id)+'">Apagar</button>':'')+'<button type="button" class="btn" data-action="fechar">Cancelar</button></div></form>');
+    +'<div class="actions"><button type="submit" class="btn pri">Guardar cliente</button>'+(c?'<button type="button" class="btn" data-action="docs-cli" data-id="'+esc(id)+'">Documentos e termo</button>':'')+(c?'<button type="button" class="btn bad" data-action="apagar-cliente" data-id="'+esc(id)+'">Apagar</button>':'')+'<button type="button" class="btn" data-action="fechar">Cancelar</button></div></form>');
 }
 
 async function guardarCliente(form){
@@ -1142,11 +1148,12 @@ async function guardarCliente(form){
   const erro=$('#c-erro');
   if(!g('c-nome')||!g('c-tel')){erro.textContent='Preencha o nome e o telefone.';erro.hidden=false;return}
   const id=form.dataset.id||'';const antigo=id?cliente(id):null;
-  const obj={nome:g('c-nome'),telefone:g('c-tel'),documento:g('c-doc'),morada:g('c-morada'),ocupacao:g('c-ocup'),rendimento:num(g('c-rend')),fiador:g('c-fiador'),fiadorTel:g('c-fiadortel'),notas:g('c-notas'),banco:g('c-banco'),iban:g('c-iban'),criado:(antigo&&antigo.criado)||hojeISO()};
+  const obj={nome:g('c-nome'),telefone:g('c-tel'),documento:g('c-doc'),morada:g('c-morada'),ocupacao:g('c-ocup'),rendimento:num(g('c-rend')),fiador:g('c-fiador'),fiadorTel:g('c-fiadortel'),notas:g('c-notas'),banco:g('c-banco'),iban:g('c-iban'),docs:antigo?clonar(antigo.docs||{}):{},criado:(antigo&&antigo.criado)||hojeISO()};
   if(antigo&&antigo.exemplo)obj.exemplo=true;
   if(id)obj.id=id;
-  const ok=await tentar(()=>salvar('clientes',obj),'Cliente guardado');
-  if(ok)fecharSheet();
+  let nid=id;
+  const ok=await tentar(async()=>{nid=await salvar('clientes',obj)},'Cliente guardado');
+  if(ok){fecharSheet();if(!id)sheetDocs(nid)}
 }
 
 /* ---------- formulário: empréstimo ---------- */
@@ -1206,7 +1213,7 @@ async function guardarEmp(form){
   if(!empValido(d)){erro.textContent='Escolha o cliente e indique capital, taxa, prazo (1 a 60 meses) e data.';erro.hidden=false;return}
   const id=form.dataset.id||'',antigo=id?emp(id):null,cl=cliente(d.clienteId);
   const pl=plano(d),av=avaliar(cl,pl.pmt,d.criterios,id||null);
-  const obj={clienteId:d.clienteId,capital:d.capital,taxa:d.taxa,prazo:d.n,metodo:d.metodo,inicio:d.inicio,estado:d.estado,notas:d.notas,criterios:d.criterios,nota:av.pct,decisao:av.dec,prestacoes:pl.lista,total:pl.total,pagamentos:antigo?clonar(antigo.pagamentos||[]):[],criado:(antigo&&antigo.criado)||hojeISO()};
+  const obj={clienteId:d.clienteId,capital:d.capital,taxa:d.taxa,prazo:d.n,metodo:d.metodo,inicio:d.inicio,estado:d.estado,notas:d.notas,criterios:d.criterios,nota:av.pct,decisao:av.dec,prestacoes:pl.lista,total:pl.total,docs:antigo?clonar(antigo.docs||{}):{},pagamentos:antigo?clonar(antigo.pagamentos||[]):[],criado:(antigo&&antigo.criado)||hojeISO()};
   if(antigo&&antigo.exemplo)obj.exemplo=true;
   if(id)obj.id=id;
   const ok=await tentar(async()=>{const nid=await salvar('emprestimos',obj);UI.empId=nid},'Empréstimo guardado');
@@ -1227,7 +1234,7 @@ function sheetAquisicao(id,pre){
     +'<label class="field"><span>Telefone</span><input type="tel" id="a-tel" value="'+esc(x.credorTel)+'" inputmode="tel" autocomplete="off"></label>'
     +'</div></div>'
     +'<div class="fs"><h3>Coordenadas bancárias do credor</h3><p class="hint">Para onde a MuiSav paga as prestações.</p><div class="fgrid">'
-    +'<label class="field"><span>Banco</span><input type="text" id="a-banco" value="'+esc(x.banco)+'" autocomplete="off"></label>'
+    +'<label class="field"><span>Banco</span>'+selBanco('a-banco',x.banco)+'</label>'
     +'<label class="field"><span>IBAN</span><input type="text" id="a-iban" value="'+esc(x.iban)+'" placeholder="AO06 0000 0000 0000 0000 0000 0" autocomplete="off"></label>'
     +'</div></div>'
     +'<div class="fs"><h3>Valor e data</h3><p class="hint">Quanto dinheiro recebeu e quando.</p><div class="fgrid">'
@@ -1357,6 +1364,85 @@ function importar(file){
   };
   r.readAsText(file);
 }
+const BANCOS=['BAI','BFA','BIC','BMA (Millennium Atlântico)','Standard Bank','BPC','Caixa Angola','Banco Sol','BCI'];
+function selBanco(id,val){val=val||'';const l=BANCOS.slice();if(val&&l.indexOf(val)<0)l.push(val);return '<select id="'+id+'"><option value="">Escolher banco</option>'+l.map(b=>'<option'+(b===val?' selected':'')+'>'+esc(b)+'</option>').join('')+'</select>'}
+const DOCS=[['req','Foto do requerente'],['bif','Foto do BI (frente)'],['biv','Foto do BI (verso)'],['termo','Foto do termo assinado']];
+function nDocs(c){const d=(c&&c.docs)||{};return DOCS.filter(x=>d[x[0]]).length}
+function secDocs(c,sheet){
+  const d=c.docs||{},n=nDocs(c);
+  let h='<section class="'+(sheet?'sec':'block')+'"><h2>Documentos e termo</h2><p class="small muted">Para concluir o pedido: 1) abra o termo, imprima e peça a assinatura; 2) tire as fotos abaixo, incluindo a do termo assinado. <span class="pill '+(n===4?'good':'warn')+'">'+n+'/4 fotos</span></p><div class="actions"><button type="button" class="btn" data-action="termo" data-id="'+esc(c.id)+'">Ver termo para assinar</button></div><div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">';
+  DOCS.forEach(x=>{h+='<div class="card"><p class="eyebrow">'+x[1]+'</p>'+(d[x[0]]?'<img data-path="'+esc(d[x[0]])+'" alt="'+x[1]+'" style="border-radius:8px;margin:8px 0">':'<p class="muted small" style="margin:8px 0">Em falta</p>')+'<label class="btn sm">'+(d[x[0]]?'Substituir':'Adicionar foto')+'<input type="file" accept="image/*" hidden data-doc="'+x[0]+'" data-id="'+esc(c.id)+'"></label></div>'});
+  return h+'</div></section>';
+}
+function sheetDocs(id){const c=cliente(id);if(!c)return;UI.docsCli=id;abrirSheet('Documentos de '+c.nome,secDocs(c,true)+'<div class="actions"><button type="button" class="btn" data-action="fechar">Fechar</button></div>')}
+function termoPartes(c,e){
+  const cf=S.config,pl=e?(e.prestacoes||[]):[];
+  const cond=e?'Capital de '+kz(e.capital)+', entregue em '+fmt(e.inicio)+', taxa de '+num(e.taxa)+'% ao mês, em '+pl.length+' prestações de '+kz((pl[0]||{}).valor||0)+', até '+fmt(fimPrevisto(e))+', pagas para '+([cf.banco,cf.titular,cf.iban].filter(Boolean).join(' · ')||'a conta indicada pela Primeira Parte')+'.':'As condições de cada empréstimo (valor, taxa, prazo e prestações) constam do respectivo calendário de pagamento, que a Segunda Parte aceita ao receber o dinheiro.';
+  return[
+   ['Partes','PRIMEIRA PARTE (Mutuante): '+(cf.negocio||'MuiSav')+'. SEGUNDA PARTE (Requerente): '+(c.nome||'______')+', BI n.º '+(c.documento||'______')+', residente em '+(c.morada||'______')+', telefone '+(c.telefone||'______')+'.'],
+   ['1. Pedido','A Segunda Parte pede a análise de um pedido de crédito. A aprovação depende da verificação da identidade, das fotografias e da assinatura deste termo.'],
+   ['2. Condições',cond],
+   ['3. Atraso','Em caso de atraso, a Primeira Parte pode contactar a Segunda Parte'+(c.fiador?' e o fiador ('+c.fiador+')':'')+'. Encargos por atraso, se acordados: ______.'],
+   ['4. Responsabilidade','A Segunda Parte declara que os dados, as fotografias e os documentos entregues são verdadeiros e seus, e assume a responsabilidade de pagar a dívida até à liquidação total.'],
+   ['5. Dados pessoais','Os documentos e fotografias são usados apenas para verificar a identidade, analisar, gerir e cobrar este crédito.'],
+   ['6. Assinaturas','Local e data: ______________  Primeira Parte: ______________  Segunda Parte: ______________']
+  ];
+}
+function sheetTermo(cid,eid){
+  const c=cliente(cid);if(!c)return;const e=eid?emp(eid):null;
+  abrirSheet('Termo de responsabilidade','<div class="sec">'+termoPartes(c,e).map(x=>'<p><strong>'+esc(x[0])+'</strong><br>'+esc(x[1])+'</p>').join('')+'<p class="small muted">Modelo base. Peça a um advogado para o rever.</p><div class="actions"><button type="button" class="btn pri" data-action="termo-dl" data-id="'+esc(cid)+'" data-eid="'+esc(eid||'')+'">Descarregar para imprimir</button><button type="button" class="btn" data-action="docs-cli" data-id="'+esc(cid)+'">Voltar às fotos</button></div></div>');
+}
+async function baixarTermo(cid,eid){
+  const c=cliente(cid);if(!c||!DL)return;const e=eid?emp(eid):null;
+  const h='<!doctype html><meta charset="utf-8"><title>Termo</title><body style="font:16px/1.5 sans-serif;max-width:700px;margin:30px auto;padding:0 16px"><h1>Termo de responsabilidade</h1>'+termoPartes(c,e).map(x=>'<p><b>'+esc(x[0])+'</b><br>'+esc(x[1])+'</p>').join('')+'</body>';
+  try{await DL.save({filename:'termo-'+(c.nome||'cliente').replace(/[^\w]+/g,'-')+'.html',data:h});toast('Ficheiro pronto')}catch(x){if(!x||x.code!=='declined')toast('Não foi possível guardar o ficheiro.',true)}
+}
+function reduzir(f){return new Promise((ok,ko)=>{const im=new Image(),u=URL.createObjectURL(f);im.onload=()=>{const r=Math.min(1,1400/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*r);c.height=Math.round(im.height*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(b=>b?ok(b):ko(),'image/jpeg',.82)};im.onerror=ko;im.src=u})}
+async function enviarFoto(inp){
+  const f=inp.files[0],k=inp.dataset.doc,id=inp.dataset.id;inp.value='';
+  toast('A enviar a foto…');
+  const ok=await tentar(async()=>{const b=await reduzir(f),p=SES.user.id+'/'+id+'-'+k+'-'+Date.now()+'.jpg',up=await SB.storage.from('docs').upload(p,b,{contentType:'image/jpeg'});if(up.error)throw up.error;const x=cliente(id);if(!x)return;const o=clonar(x);o.docs=Object.assign({},o.docs,{[k]:p});await salvar('clientes',o)},'Foto guardada');
+  if(ok&&UI.docsCli===id&&!$('#sheet').hidden)sheetDocs(id);
+}
+const FOTOS={};
+async function carregarFotos(){for(const i of document.querySelectorAll('img[data-path]')){const p=i.dataset.path;if(!FOTOS[p]){const r=await SB.storage.from('docs').createSignedUrl(p,3600);if(r.data)FOTOS[p]=r.data.signedUrl}if(FOTOS[p])i.src=FOTOS[p]}}
+async function entrar(){const e=$('#l-erro'),r=await SB.auth.signInWithPassword({email:$('#l-email').value.trim(),password:$('#l-pass').value});if(r.error){e.textContent='Email ou palavra-passe incorrectos.';e.hidden=false}}
+function vLogin(){return '<section class="block"><h2>Entrar</h2><form id="f-login" class="sec"><label class="field"><span>Email</span><input type="email" id="l-email" autocomplete="username" required></label><label class="field"><span>Palavra-passe</span><input type="password" id="l-pass" autocomplete="current-password" required></label><p class="small" id="l-erro" style="color:var(--bad)" hidden></p><div class="actions"><button type="submit" class="btn pri">Entrar</button></div><p class="small muted">A conta é criada pelo administrador.</p></form></section>'}
+async function carregarAdmin(){
+  ADMLOAD=true;
+  const p=await SB.from('perfis').select('id,nome,papel'),r=await SB.from('registos').select('k,owner,col,data').in('col',['clientes','emprestimos']);
+  ADMLOAD=false;
+  if(p.error||r.error){ADM=false;render();return}
+  ADMROWS=r.data;ADMPERF=p.data;
+  ADM=p.data.map(u=>{const m=r.data.filter(x=>x.owner===u.id),em=m.filter(x=>x.col==='emprestimos');return{nome:u.nome,papel:u.papel,cli:m.filter(x=>x.col==='clientes').length,emp:em.length,ana:em.filter(x=>x.data.estado==='analise').length,cap:em.filter(x=>x.data.estado==='activo'||x.data.estado==='liquidado').reduce((t,x)=>t+num(x.data.capital),0)}});
+  render();
+}
+function vAdmin(){
+  if(ADM===false)return '<div class="card">Não foi possível carregar a equipa.</div>';
+  if(ADM===undefined){if(!ADMLOAD)carregarAdmin();return carregando()}
+  const pend=ADMROWS.filter(x=>x.col==='emprestimos'&&x.data.estado==='analise'),nome=o=>{const u=ADMPERF.find(p=>p.id===o);return u?u.nome:'—'};
+  let h='<section class="sec"><div class="sec-h"><h2>Pedidos por aprovar</h2><button type="button" class="btn sm" data-action="admin-rec">Actualizar</button></div>';
+  h+=pend.length?'<ul class="list">'+pend.map(r=>{const cl=ADMROWS.find(x=>x.k==='clientes:'+r.data.clienteId),c=cl?cl.data:{},n=nDocs(c);return '<li><button type="button" class="row" data-action="adm-ver" data-k="'+esc(r.k)+'"><div class="row-top"><strong>'+esc(c.nome||'Cliente')+'</strong><span class="pill '+(n===4?'good':'warn')+'">'+n+'/4 fotos</span></div><span class="small muted">'+kz(r.data.capital)+' · colaborador: '+esc(nome(r.owner))+'</span></button></li>'}).join('')+'</ul>':'<p class="muted">Nenhum pedido à espera.</p>';
+  h+='</section><section class="sec"><h2>Equipa</h2><ul class="list">'+ADM.map(u=>'<li class="card"><strong>'+esc(u.nome)+'</strong>'+(u.papel==='admin'?' <span class="pill acc">admin</span>':'')+'<p class="small muted">'+u.cli+' clientes · '+u.emp+' empréstimos ('+u.ana+' em análise) · capital '+kz(u.cap)+'</p></li>').join('')+'</ul></section>';
+  return h;
+}
+function sheetAdm(k){
+  const r=ADMROWS.find(x=>x.k===k);if(!r)return;
+  const cl=ADMROWS.find(x=>x.k==='clientes:'+r.data.clienteId),c=cl?cl.data:{},d=c.docs||{};
+  UI.admK=k;
+  abrirSheet('Analisar pedido','<div class="sec"><p><strong>'+esc(c.nome||'Cliente')+'</strong><br><span class="muted small">BI '+esc(c.documento||'—')+' · tel. '+esc(c.telefone||'—')+' · pedido de '+kz(r.data.capital)+'</span></p><div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">'+DOCS.map(x=>'<div class="card"><p class="eyebrow">'+x[1]+'</p>'+(d[x[0]]?'<img data-path="'+esc(d[x[0]])+'" alt="'+x[1]+'" style="border-radius:8px;margin:8px 0">':'<p class="muted small" style="margin:8px 0">Em falta</p>')+'</div>').join('')+'</div><label class="small"><input type="checkbox" id="adm-ok"> Confirmo que verifiquei as fotos e a assinatura e que a pessoa existe.</label><div class="actions"><button type="button" class="btn pri" data-action="adm-aprovar">Aprovar</button><button type="button" class="btn bad" data-action="adm-recusar">Recusar</button></div></div>');
+  carregarFotos();
+}
+async function decidirAdm(novo){
+  const r=ADMROWS.find(x=>x.k===UI.admK);if(!r)return;
+  const cl=ADMROWS.find(x=>x.k==='clientes:'+r.data.clienteId),d=(cl&&cl.data.docs)||{};
+  if(novo==='activo'){
+    if(DOCS.some(x=>!d[x[0]])){toast('Faltam fotos: não pode aprovar.',true);return}
+    if(!$('#adm-ok').checked){toast('Marque a confirmação antes de aprovar.',true);return}
+  }
+  const ok=await tentar(async()=>{const nd=Object.assign({},r.data,{estado:novo}),u=await SB.from('registos').update({data:nd}).eq('k',r.k).select();if(u.error||!u.data||!u.data.length)throw u.error||{};},novo==='activo'?'Pedido aprovado':'Pedido recusado');
+  if(ok){fecharSheet();ADM=undefined;render()}
+}
 /* ---------- eventos ---------- */
 document.addEventListener('click',async ev=>{
   const nv=ev.target.closest('[data-nav]');
@@ -1392,6 +1478,14 @@ document.addEventListener('click',async ev=>{
     case 'msg':{const e=emp(id),al=e&&alertaDe(e);if(al)copiar(mensagem(al));break}
     case 'exp-csv':exportar('csv');break;
     case 'exp-json':exportar('json');break;
+    case 'termo':sheetTermo(id,el.dataset.eid);break;
+    case 'termo-dl':baixarTermo(id,el.dataset.eid);break;
+    case 'docs-cli':sheetDocs(id);break;
+    case 'adm-ver':sheetAdm(el.dataset.k);break;
+    case 'adm-aprovar':decidirAdm('activo');break;
+    case 'adm-recusar':decidirAdm('recusado');break;
+    case 'sair':SB.auth.signOut();break;
+    case 'admin-rec':ADM=undefined;render();break;
     case 'imp-json':{const i=$('#f-imp');if(i)i.click();break}
     case 'exemplos':tentar(carregarExemplos,'Dados de exemplo carregados');break;
     case 'rem-exemplos':tentar(removerExemplos,'Dados de exemplo removidos');break;
@@ -1400,7 +1494,8 @@ document.addEventListener('click',async ev=>{
 document.addEventListener('submit',ev=>{
   ev.preventDefault();
   const f=ev.target;
-  if(f.id==='f-cliente')guardarCliente(f);
+  if(f.id==='f-login')entrar();
+  else if(f.id==='f-cliente')guardarCliente(f);
   else if(f.id==='f-emp')guardarEmp(f);
   else if(f.id==='f-aq')guardarAq(f);
   else if(f.id==='f-pag')guardarPagamento(f);
@@ -1419,8 +1514,9 @@ document.addEventListener('input',ev=>{
 });
 document.addEventListener('change',ev=>{if(ev.target.closest&&ev.target.closest('#f-emp'))atualizarPrev();else if(ev.target.closest&&ev.target.closest('#f-aq'))atualizarPrevAq()});
 document.addEventListener('change',ev=>{const t=ev.target;if(t&&t.id==='f-imp'&&t.files&&t.files[0]){importar(t.files[0]);t.value=''}});
+document.addEventListener('change',ev=>{const t=ev.target;if(t&&t.dataset&&t.dataset.doc&&t.files&&t.files[0])enviarFoto(t)});
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&!$('#sheet').hidden)fecharSheet()});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)render()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){if(SB&&SES)ligar();else render()}});
 
 render();
 iniciar();
