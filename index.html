@@ -396,8 +396,8 @@ const ESTADOS={analise:['Em análise',''],activo:['Activo','acc'],atraso:['Em at
 const METODOS={simples:'Juros simples sobre o capital',price:'Prestação constante com juros sobre o saldo'};
 
 const S={clientes:[],emprestimos:[],aquisicoes:[],config:Object.assign({},DEF),pronto:{c:false,e:false,a:false,g:false},modo:'a ligar',erro:'',lsOK:true};
-const UI={sim:null,view:'painel',empId:null,aqId:null,filtro:'todos',filtroAq:'todos',busca:'',confirmFn:null};
-let SB=null,SES=null,PERFIL=null,ADMROWS=[],ADMPERF=[],ADM,ADMLOAD=false,DB=null,DL=null,D={},aSalvar=false,toastT=null;
+const UI={reg:false,msg:'',sim:null,view:'painel',empId:null,aqId:null,filtro:'todos',filtroAq:'todos',busca:'',confirmFn:null};
+let SB=null,SES=null,PERFIL=null,ADMROWS=[],ADMPERF=[],ADMPED=[],ADM,ADMLOAD=false,DB=null,DL=null,D={},aSalvar=false,toastT=null;
 
 const prontoTudo=()=>S.pronto.c&&S.pronto.e&&S.pronto.a&&S.pronto.g;
 const novoId=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -421,12 +421,16 @@ function lerLocal(){
 }
 function gravarLocal(){}
 async function ligar(){
+  const p=await SB.from('perfis').select('nome,papel').eq('id',SES.user.id).maybeSingle();
+  if(p.error){S.erro='Não foi possível ler os dados.';render();return}
+  PERFIL=p.data||{papel:'cliente'};
+  if(PERFIL.papel!=='admin'&&PERFIL.papel!=='colaborador'){S.modo='cliente';S.erro='';await carregarMeus();return}
+  S.modo='nuvem';
   const r=await SB.from('registos').select('k,col,data').eq('owner',SES.user.id);
   if(r.error){S.erro='Não foi possível ler os dados.';render();return}
   const a={clientes:[],emprestimos:[],aquisicoes:[]};let cfg={};
   r.data.forEach(x=>{const id=x.k.slice(x.col.length+1);if(x.col==='config')cfg=x.data;else if(a[x.col])a[x.col].push(Object.assign({},x.data,{id:id}))});
   S.clientes=a.clientes;S.emprestimos=a.emprestimos;S.aquisicoes=a.aquisicoes;S.config=Object.assign({},DEF,cfg);S.erro='';
-  const p=await SB.from('perfis').select('nome,papel').eq('id',SES.user.id).maybeSingle();PERFIL=p.data||{papel:'colaborador'};
   S.pronto={c:true,e:true,a:true,g:true};render();
 }
 const FICH={async save(o){
@@ -626,7 +630,7 @@ function carregando(){
 function infoArmazem(){
   const el=$('#storeInfo');
   const f=(c,t)=>'<span class="sdot '+c+'"></span>'+t;
-  if(S.modo==='nuvem')el.innerHTML=f('good',esc(SES.user.email)+' · <button type="button" class="chip" data-action="sair">Sair</button>');
+  if(S.modo==='nuvem'||S.modo==='cliente')el.innerHTML=f('good',esc(SES.user.email)+' · <button type="button" class="chip" data-action="sair">Sair</button>');
   else if(S.modo==='local')el.innerHTML=S.lsOK?f('warn','Só neste dispositivo'):f('bad','Sem armazenamento');
   else el.innerHTML=f('','A ligar…');
 }
@@ -1076,7 +1080,7 @@ function render(){
   let ss=null,se=null;if(fid&&a.selectionStart!=null){try{ss=a.selectionStart;se=a.selectionEnd}catch(_){}}
   const y=window.scrollY;
   const V={painel:vPainel,clientes:vClientes,emprestimos:vEmprestimos,emprestimo:vEmprestimo,aquisicoes:vAquisicoes,aquisicao:vAquisicao,apoio:vApoio,admin:vAdmin};
-  main.innerHTML=S.modo==='login'?vLogin():S.modo==='config'?'<div class="card">Falta configurar o Supabase: edite SB_URL e SB_KEY no index.html.</div>':(V[UI.view]||vPainel)();
+  main.innerHTML=S.modo==='login'?vLogin():S.modo==='cliente'?vCliente():S.modo==='config'?'<div class="card">Falta configurar o Supabase: edite SB_URL e SB_KEY no index.html.</div>':(V[UI.view]||vPainel)();
   if(UI.view==='apoio')atualizarSim();
   if(fid){const n=document.getElementById(fid);if(n){n.focus();try{if(ss!=null)n.setSelectionRange(ss,se)}catch(_){}}}
   window.scrollTo(0,y);
@@ -1087,6 +1091,7 @@ function render(){
   const n=prontoTudo()?alertas().concat(alertasAq()).filter(x=>x.grupo==='atraso'||x.grupo==='hoje').length:0;
   const bd=$('#navBadge');bd.hidden=!n;bd.textContent=n;
   const hj=$('#hoje');if(hj)hj.textContent=new Date().toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  {const nb=document.querySelector('.nav');if(nb)nb.style.display=(S.modo==='cliente'||S.modo==='login')?'none':''}
   const na=$('#navAdmin');if(na)na.hidden=!(PERFIL&&PERFIL.papel==='admin');
   infoArmazem();
   if(SB&&SES)carregarFotos();
@@ -1407,21 +1412,66 @@ async function enviarFoto(inp){
 const FOTOS={};
 async function carregarFotos(){for(const i of document.querySelectorAll('img[data-path]')){const p=i.dataset.path;if(!FOTOS[p]){const r=await SB.storage.from('docs').createSignedUrl(p,3600);if(r.data)FOTOS[p]=r.data.signedUrl}if(FOTOS[p])i.src=FOTOS[p]}}
 async function entrar(){const e=$('#l-erro'),r=await SB.auth.signInWithPassword({email:$('#l-email').value.trim(),password:$('#l-pass').value});if(r.error){e.textContent='Email ou palavra-passe incorrectos.';e.hidden=false}}
-function vLogin(){return '<section class="block"><h2>Entrar</h2><form id="f-login" class="sec"><label class="field"><span>Email</span><input type="email" id="l-email" autocomplete="username" required></label><label class="field"><span>Palavra-passe</span><input type="password" id="l-pass" autocomplete="current-password" required></label><p class="small" id="l-erro" style="color:var(--bad)" hidden></p><div class="actions"><button type="submit" class="btn pri">Entrar</button></div><p class="small muted">A conta é criada pelo administrador.</p></form></section>'}
+function vLogin0(){return '<section class="block"><h2>Entrar</h2><form id="f-login" class="sec"><label class="field"><span>Email</span><input type="email" id="l-email" autocomplete="username" required></label><label class="field"><span>Palavra-passe</span><input type="password" id="l-pass" autocomplete="current-password" required></label><p class="small" id="l-erro" style="color:var(--bad)" hidden></p><div class="actions"><button type="submit" class="btn pri">Entrar</button><button type="button" class="btn ghost" data-action="ver-reg">Criar conta</button></div><p class="small muted">Crie a sua conta para pedir os nossos serviços.</p></form></section>'}
+function vLogin(){
+  const m=UI.msg?'<div class="notice">'+esc(UI.msg)+'</div>':'';
+  if(!UI.reg)return m+vLogin0();
+  return m+'<section class="block"><h2>Criar conta</h2><form id="f-reg" class="sec"><label class="field"><span>Nome</span><input type="text" id="r-nome" autocomplete="name" required></label><label class="field"><span>Email</span><input type="email" id="r-email" autocomplete="username" required></label><label class="field"><span>Palavra-passe (mínimo 8 caracteres)</span><input type="password" id="r-pass" autocomplete="new-password" minlength="8" required></label><label class="field"><span>Repetir palavra-passe</span><input type="password" id="r-pass2" autocomplete="new-password" minlength="8" required></label><p class="small" id="r-erro" style="color:var(--bad)" hidden></p><div class="actions"><button type="submit" class="btn pri">Criar conta</button><button type="button" class="btn ghost" data-action="ver-login">Já tenho conta</button></div><p class="small muted">Depois de criar a conta, pode pedir os nossos serviços. Cada pedido é analisado pelo administrador.</p></form></section>';
+}
+async function registar(){
+  const e=$('#r-erro'),nome=$('#r-nome').value.trim(),email=$('#r-email').value.trim(),p1=$('#r-pass').value,p2=$('#r-pass2').value;
+  const erro=t=>{e.textContent=t;e.hidden=false};
+  if(!nome)return erro('Escreva o seu nome.');
+  if(p1.length<8)return erro('A palavra-passe deve ter pelo menos 8 caracteres.');
+  if(p1!==p2)return erro('As palavras-passe não coincidem.');
+  const r=await SB.auth.signUp({email:email,password:p1,options:{data:{nome:nome}}});
+  if(r.error){erro(/registered|already/i.test(r.error.message||'')?'Este email já tem conta. Use Entrar.':'Não foi possível criar a conta. Tente outra vez.');return}
+  if(!r.data||!r.data.session){UI.reg=false;UI.msg='Conta criada. Confirme o seu email e depois entre.';render()}
+}
+async function carregarMeus(){
+  const r=await SB.from('pedidos').select('id,tipo,valor,prazo,finalidade,estado,criado').order('criado',{ascending:false});
+  if(r.error){S.meus=[];S.erro='Não foi possível ler os seus pedidos.'}else{S.meus=r.data;S.erro=''}
+  render();
+}
+function vCliente(){
+  const nome=(PERFIL&&PERFIL.nome)||'';
+  const est={analise:['Em análise',' warn'],aprovado:['Aprovado',' good'],recusado:['Recusado','']};
+  const tipo={concessao:'Concessão de crédito',aquisicao:'Aquisição de crédito'};
+  const lista=(S.meus||[]).map(x=>{const e=est[x.estado]||['—',''];return '<li class="card"><div class="row-top"><strong>'+esc(tipo[x.tipo]||x.tipo)+'</strong><span class="pill'+e[1]+'">'+e[0]+'</span></div><p class="small muted">'+kz(x.valor)+' · '+esc(x.prazo)+' meses · '+new Date(x.criado).toLocaleDateString('pt-PT')+'</p>'+(x.finalidade?'<p class="small">'+esc(x.finalidade)+'</p>':'')+'</li>'}).join('');
+  return (S.erro?'<div class="notice bad">'+esc(S.erro)+'</div>':'')+'<section class="block"><h2>Olá'+(nome?', '+esc(nome):'')+'</h2><p class="small muted">Faça o seu pedido. O administrador analisa e responde.</p><form id="f-ped" class="sec"><label class="field"><span>Serviço</span><select id="q-tipo"><option value="concessao">Concessão de crédito</option><option value="aquisicao">Aquisição de crédito</option></select></label><label class="field"><span>Valor (Kz)</span><input type="number" id="q-val" min="1" step="any" inputmode="decimal" required></label><label class="field"><span>Prazo (meses, 1 a 60)</span><input type="number" id="q-prazo" min="1" max="60" inputmode="numeric" required></label><label class="field"><span>Telefone</span><input type="tel" id="q-tel" autocomplete="tel" required></label><label class="field"><span>Finalidade (opcional)</span><input type="text" id="q-fin" autocomplete="off"></label><p class="small" id="q-erro" style="color:var(--bad)" hidden></p><div class="actions"><button type="submit" class="btn pri">Enviar pedido</button></div></form></section><section class="sec"><h2>Os meus pedidos</h2>'+(lista?'<ul class="list">'+lista+'</ul>':'<p class="small muted">Ainda não fez nenhum pedido.</p>')+'</section>';
+}
+async function enviarPedido(){
+  const e=$('#q-erro'),erro=t=>{e.textContent=t;e.hidden=false};
+  const tipo=$('#q-tipo').value,valor=Number($('#q-val').value),prazo=parseInt($('#q-prazo').value,10),tel=$('#q-tel').value.trim(),fin=$('#q-fin').value.trim();
+  if(!(valor>0))return erro('Indique o valor do pedido.');
+  if(!(prazo>=1&&prazo<=60))return erro('O prazo deve ser entre 1 e 60 meses.');
+  if(tel.length<6)return erro('Indique um telefone para contacto.');
+  const ok=await tentar(async()=>{const r=await SB.from('pedidos').insert({tipo:tipo,valor:valor,prazo:prazo,telefone:tel,finalidade:fin});if(r.error)throw r.error},'Pedido enviado');
+  if(ok)await carregarMeus();
+}
+function pedidosCli(){
+  const ficha=o=>ADMPERF.find(p=>p.id===o)||{},tipo={concessao:'Concessão',aquisicao:'Aquisição'};
+  const pend=ADMPED.filter(x=>x.estado==='analise'),dec=ADMPED.filter(x=>x.estado!=='analise').slice(0,10);
+  let h='<section class="sec"><div class="sec-h"><h2>Pedidos de clientes</h2></div>';
+  h+=pend.length?'<ul class="list">'+pend.map(x=>{const u=ficha(x.owner);return '<li class="card"><div class="row-top"><strong>'+esc(u.nome||'—')+'</strong><span class="pill warn">'+esc(tipo[x.tipo]||x.tipo)+'</span></div><p class="small muted">'+kz(x.valor)+' · '+esc(x.prazo)+' meses · tel. '+esc(x.telefone||'—')+'</p><p class="small muted">'+esc(u.email||'')+'</p>'+(x.finalidade?'<p class="small">'+esc(x.finalidade)+'</p>':'')+'<div class="actions"><button type="button" class="btn pri sm" data-action="ped-ok" data-id="'+esc(x.id)+'">Aprovar</button><button type="button" class="btn bad sm" data-action="ped-no" data-id="'+esc(x.id)+'">Recusar</button></div></li>'}).join('')+'</ul>':'<p class="small muted">Sem pedidos por analisar.</p>';
+  if(dec.length)h+='<h3>Decididos</h3><ul class="list">'+dec.map(x=>'<li class="card"><div class="row-top"><strong>'+esc(ficha(x.owner).nome||'—')+'</strong><span class="pill'+(x.estado==='aprovado'?' good':'')+'">'+(x.estado==='aprovado'?'Aprovado':'Recusado')+'</span></div><p class="small muted">'+esc(tipo[x.tipo]||x.tipo)+' · '+kz(x.valor)+' · '+esc(x.prazo)+' meses</p></li>').join('')+'</ul>';
+  return h+'</section>';
+}
 async function carregarAdmin(){
   ADMLOAD=true;
-  const p=await SB.from('perfis').select('id,nome,papel'),r=await SB.from('registos').select('k,owner,col,data').in('col',['clientes','emprestimos']);
+  const p=await SB.from('perfis').select('id,nome,papel,email'),r=await SB.from('registos').select('k,owner,col,data').in('col',['clientes','emprestimos']);
   ADMLOAD=false;
   if(p.error||r.error){ADM=false;render();return}
   ADMROWS=r.data;ADMPERF=p.data;
-  ADM=p.data.map(u=>{const m=r.data.filter(x=>x.owner===u.id),em=m.filter(x=>x.col==='emprestimos');return{nome:u.nome,papel:u.papel,cli:m.filter(x=>x.col==='clientes').length,emp:em.length,ana:em.filter(x=>x.data.estado==='analise').length,cap:em.filter(x=>x.data.estado==='activo'||x.data.estado==='liquidado').reduce((t,x)=>t+num(x.data.capital),0)}});
+  {const q=await SB.from('pedidos').select('id,owner,tipo,valor,prazo,telefone,finalidade,estado,criado').order('criado',{ascending:false});ADMPED=q.error?[]:q.data}
+  ADM=p.data.filter(u=>u.papel==='admin'||u.papel==='colaborador').map(u=>{const m=r.data.filter(x=>x.owner===u.id),em=m.filter(x=>x.col==='emprestimos');return{nome:u.nome,papel:u.papel,cli:m.filter(x=>x.col==='clientes').length,emp:em.length,ana:em.filter(x=>x.data.estado==='analise').length,cap:em.filter(x=>x.data.estado==='activo'||x.data.estado==='liquidado').reduce((t,x)=>t+num(x.data.capital),0)}});
   render();
 }
 function vAdmin(){
   if(ADM===false)return '<div class="card">Não foi possível carregar a equipa.</div>';
   if(ADM===undefined){if(!ADMLOAD)carregarAdmin();return carregando()}
   const pend=ADMROWS.filter(x=>x.col==='emprestimos'&&x.data.estado==='analise'),nome=o=>{const u=ADMPERF.find(p=>p.id===o);return u?u.nome:'—'};
-  let h='<section class="sec"><div class="sec-h"><h2>Pedidos por aprovar</h2><button type="button" class="btn sm" data-action="admin-rec">Actualizar</button></div>';
+  let h=pedidosCli()+'<section class="sec"><div class="sec-h"><h2>Pedidos por aprovar</h2><button type="button" class="btn sm" data-action="admin-rec">Actualizar</button></div>';
   h+=pend.length?'<ul class="list">'+pend.map(r=>{const cl=ADMROWS.find(x=>x.k==='clientes:'+r.data.clienteId),c=cl?cl.data:{},n=nDocs(c);return '<li><button type="button" class="row" data-action="adm-ver" data-k="'+esc(r.k)+'"><div class="row-top"><strong>'+esc(c.nome||'Cliente')+'</strong><span class="pill '+(n===4?'good':'warn')+'">'+n+'/4 fotos</span></div><span class="small muted">'+kz(r.data.capital)+' · colaborador: '+esc(nome(r.owner))+'</span></button></li>'}).join('')+'</ul>':'<p class="muted">Nenhum pedido à espera.</p>';
   h+='</section><section class="sec"><h2>Equipa</h2><ul class="list">'+ADM.map(u=>'<li class="card"><strong>'+esc(u.nome)+'</strong>'+(u.papel==='admin'?' <span class="pill acc">admin</span>':'')+'<p class="small muted">'+u.cli+' clientes · '+u.emp+' empréstimos ('+u.ana+' em análise) · capital '+kz(u.cap)+'</p></li>').join('')+'</ul></section>';
   return h;
@@ -1485,6 +1535,13 @@ document.addEventListener('click',async ev=>{
     case 'adm-aprovar':decidirAdm('activo');break;
     case 'adm-recusar':decidirAdm('recusado');break;
     case 'sair':SB.auth.signOut();break;
+    case 'ver-reg':UI.reg=true;UI.msg='';render();break;
+    case 'ver-login':UI.reg=false;UI.msg='';render();break;
+    case 'ped-ok':case 'ped-no':{
+      const novo=a==='ped-ok'?'aprovado':'recusado';
+      const ok=await tentar(async()=>{const u=await SB.from('pedidos').update({estado:novo}).eq('id',id).select();if(u.error||!u.data||!u.data.length)throw u.error||{}},novo==='aprovado'?'Pedido aprovado':'Pedido recusado');
+      if(ok){ADM=undefined;render()}
+      break}
     case 'admin-rec':ADM=undefined;render();break;
     case 'imp-json':{const i=$('#f-imp');if(i)i.click();break}
     case 'exemplos':tentar(carregarExemplos,'Dados de exemplo carregados');break;
@@ -1495,6 +1552,8 @@ document.addEventListener('submit',ev=>{
   ev.preventDefault();
   const f=ev.target;
   if(f.id==='f-login')entrar();
+  else if(f.id==='f-reg')registar();
+  else if(f.id==='f-ped')enviarPedido();
   else if(f.id==='f-cliente')guardarCliente(f);
   else if(f.id==='f-emp')guardarEmp(f);
   else if(f.id==='f-aq')guardarAq(f);
